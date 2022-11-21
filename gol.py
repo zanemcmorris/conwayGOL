@@ -13,6 +13,7 @@ import time
 import pygame
 import random
 import sys
+import os
 
 
 
@@ -30,6 +31,9 @@ def brdCopy(brd):
             for col in range(len(brd)):
                 retBoard[row][col] = brd[row][col]
         return retBoard
+
+
+    
 # Found function from on stackoverflow for drawing a cell with an outline.
 # Implementation is simple and is performed by drawing a box with outline color, and then a smaller box
 # with the desired cell color.
@@ -58,9 +62,20 @@ class gol:
         self.size = size
         self.board = [[Cell([i,j], False) for i in range(size)] for j in range(size)]
         self.numGens = 0
+        self.initBoard = [[Cell([i,j], False) for i in range(size)] for j in range(size)]
+        self.finalBoard = [[Cell([i,j], False) for i in range(size)] for j in range(size)]
+        self.endCond = 0
+        self.boardHistory = [[[Cell([i,j], False) for i in range(size)] for j in range(size)]]
 
-    def getNumGens(self):
-        return self.getNumGens
+    def brdCompare(self, brd1, brd2)->bool: #returns true if 2 boards are the same
+        for row in range(self.size):
+            for col in range(self.size):
+                if(brd1[row][col].alive == brd2[row][col].alive):
+                    pass
+                else:
+                    return False
+        return True
+
 
     
     def evaluate(self):
@@ -124,7 +139,40 @@ class gol:
                 #END OF LOOP
         #Set board to new board - return
         self.board = boardTemplate
+        self.boardHistory.append(self.board)
         return
+
+
+    def brdToString(self, brd)->str:
+        # encodes current board as series of 1's, 0's, and \n's
+        ret = ""
+        for row in range(0, self.size):
+            for col in range(0, self.size):
+                if(brd[row][col].alive):
+                    ret = ret + str(1)
+                else:    
+                    ret = ret + str(0)
+            ret = ret + "\n"
+        return ret
+
+
+    def writeState(self):
+        # -------- Filesystem ----------
+
+        # When every GOL ends, we want to add to a file 4 items:
+        # 1: Initial State
+        # 2: Final State
+        # 3: Ending Condition (0 = dead, 1 = period 2, 2 = repeatedBoard)
+        # 4: # of generations
+        file = open("data.txt", "a")
+        file.write("\n")
+        file.write(self.brdToString(self.initBoard))
+        file.write("\n")
+        file.write(self.brdToString(self.finalBoard))
+        file.write(str(self.numGens) + " " + str(self.endCond))
+        file.close()
+        
+    
 
     def isDead(self)->bool:
         for row in range(self.size):
@@ -140,6 +188,27 @@ class gol:
             for col in range(self.size):
                 self.board[row][col].alive = (random.randint(0,1))
 
+    def setInitialState(self):
+        self.initBoard = self.board
+
+    def isPeriod2(self)->bool:
+        # Simply looks at boards (1 & 3) and returns if true
+        # O(1)
+        if (self.numGens > 2):
+            return self.brdCompare(self.board, self.boardHistory[self.numGens - 2])
+        else:        
+            return False
+    
+    def isRepeat(self)->bool:
+        # scans entirety of board history to see if current board has ever been seen
+        # O(n!) - horrible efficiency
+        if(self.numGens > 2):
+            for i in range(1, self.numGens):
+                if(self.brdCompare(self.board, self.boardHistory[i])):
+                    return True
+                else: 
+                    pass
+            return False
 
 def main():
     # -------- Game setup ----------
@@ -149,14 +218,9 @@ def main():
     # 
     # 256 seems to be good scale for large board, and 128 for medium
     # and 64 for small. Smaller values work fine, but going larger
-    # becomes more and more intensive & unstable
+    # becomes more and more intensive & unstable for the GUI
     # ------------------------------
     gameScale = 128
-    #Create instance of GOL using gamescale as input
-    game = gol(gameScale)
-    #Set all cells to be randomly alive or dead
-    game.setRandomStates()
-    #Start GUI
     pygame.init()
     width = 600
     height = 600
@@ -164,45 +228,77 @@ def main():
     pygame.display.set_caption('Conway\'s Game of Life')
     clock = pygame.time.Clock()
     cellSize = height/gameScale
-    #Start time clock
-    startTime = time.time()
+    numGames = 0
 
-
-
-   
-    #Game loop 
+    #Game looping loop!
     while(1):
-        #print2dArray(game.board)
-        game.evaluate()
-        game.numGens+=1
-        #time.sleep(.1)
-        if(game.isDead()):
-            break
-        # Make the X button work to quit program
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-        # Fill each cell on the GUI
-        for row in range(game.size):
-            for col in range(game.size):
-                tempCell = game.board[row][col]
-                tempCellSurf = pygame.Surface((cellSize,cellSize))
-                #Set color of cell dependant on Alive status
-                if(tempCell.alive):
-                    fill_woutline(tempCellSurf, 'Green', 'Black')
-                else:
-                    fill_woutline(tempCellSurf, 'Black', 'Black')
-                # Set location of cell
-                screen.blit(tempCellSurf,(tempCell.loc[0]*cellSize,tempCell.loc[1]*cellSize))
-        pygame.display.update()
 
-        # Generation rate / sec
-        # 
-        if(game.numGens%20 == 0):
-            timeDelta = time.time() - startTime
-            generationRate = round(20/timeDelta, 2)
-            startTime = time.time()
-            print(generationRate," generations /sec")
+        game = gol(gameScale)
+        game.setRandomStates()
+        game.board[20][20].alive = True
+        game.board[20][21].alive = True
+        game.board[20][22].alive = True
+
+
+        game.setInitialState()
+        startTime = time.time()
+
+        #Game loop 
+        while(1):
+            #print2dArray(game.board)
+            game.evaluate()
+            game.numGens+=1
+            #time.sleep(.1)
+            if(game.isDead()):
+                print("Dead board detected on generation", game.numGens)
+                game.endCond = 0
+                game.finalBoard = game.board
+                game.writeState()
+                break
+            # if(game.isRepeat()):
+            #     print("Repeat Board detected on generation", game.numGens)
+            #     game.endCond = 1
+            #     game.finalBoard = game.board
+            #     game.writeState()
+            #     break
+            if(game.isPeriod2()):
+                print("Periodicity 2 detected on generation", game.numGens)
+                game.endCond = 2
+                game.finalBoard = game.board
+                game.writeState()
+                break
+            # Make the X button work to quit program
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+            # Fill each cell on the GUI
+            for row in range(game.size):
+                for col in range(game.size):
+                    tempCell = game.board[row][col]
+                    tempCellSurf = pygame.Surface((cellSize,cellSize))
+                    #Set color of cell dependant on Alive status
+                    if(tempCell.alive):
+                        fill_woutline(tempCellSurf, 'Green', 'Black')
+                    else:
+                        fill_woutline(tempCellSurf, 'Black', 'Black')
+                    # Set location of cell
+                    screen.blit(tempCellSurf,(tempCell.loc[0]*cellSize,tempCell.loc[1]*cellSize))
+            pygame.display.update()
+
+            # Generation rate / sec
+            # 
+            if(game.numGens%20 == 0):
+                timeDelta = time.time() - startTime
+                # Round rate to 2 decimal places
+                generationRate = round(20/timeDelta, 2)
+                startTime = time.time()
+                os.system('cls')
+                print(generationRate," generations /sec")
+                print(len(game.boardHistory), " boards")
+        print(str(numGames))
+
+
+
 
 if __name__ == "__main__":
     main()
