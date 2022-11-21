@@ -235,9 +235,9 @@ def main():
 
         game = gol(gameScale)
         game.setRandomStates()
-        game.board[20][20].alive = True
-        game.board[20][21].alive = True
-        game.board[20][22].alive = True
+        # game.board[20][20].alive = True
+        # game.board[20][21].alive = True
+        # game.board[20][22].alive = True
 
 
         game.setInitialState()
